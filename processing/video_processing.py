@@ -5,19 +5,16 @@ import numpy as np
 from .utils import detect_person, track_person, verify_faces, process_verified_people
 import logging
 import asyncio
-
-logging.basicConfig(level=logging.DEBUG)
+from concurrent.futures import ThreadPoolExecutor
 
 previous_frame_data = {}
 
-async def process_video_frame(data, yolo_model, deepsort_model, deepface_model):
-    nparr = np.frombuffer(data, np.uint8)
-    frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
-    if frame is None:
-        logging.error("Failed to decode image")
-        raise ValueError("Failed to decode image")
+logging.basicConfig(level=logging.DEBUG, format='%(threadName)s: %(message)s')
+executor = ThreadPoolExecutor(max_workers=4)
 
+def process_frame(frame, yolo_model, deepsort_model, deepface_model):
+    logging.debug("Starting frame processing")
     # Apply YOLO for human detection
     person_detected, results = detect_person(frame, yolo_model)
     
@@ -29,12 +26,25 @@ async def process_video_frame(data, yolo_model, deepsort_model, deepface_model):
         faces_detected = is_face_detected(data)
         verification_results = verify_faces(frame, faces_detected, data, deepface_model)
         
-        # # Display verification results on frame
+        # Display verification results on frame
         process_verified_people(verification_results, data, frame)
         
-    # Encode the processed frame back to bytes
-    _, buffer = cv2.imencode('.jpg', frame)
-    await asyncio.sleep(0)  # Yield control to the event loop
+    logging.debug("Completed frame processing")
+    return frame
+
+async def process_video_frame(data, yolo_model, deepsort_model, deepface_model):
+    nparr = np.frombuffer(data, np.uint8)
+    frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+    if frame is None:
+        logging.error("Failed to decode image")
+        raise ValueError("Failed to decode image")
+
+    logging.debug("Submitting frame to thread pool")
+    loop = asyncio.get_event_loop()
+    processed_frame = await loop.run_in_executor(executor, process_frame, frame, yolo_model, deepsort_model, deepface_model)
+    
+    _, buffer = cv2.imencode('.jpg', processed_frame)
     return buffer.tobytes()
 
 def is_face_detected(data):
