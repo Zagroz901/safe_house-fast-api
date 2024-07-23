@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, validator
+from pydantic import BaseModel, EmailStr, validator,conint
 
 class UserCreate(BaseModel):
     username: str
@@ -13,8 +13,6 @@ class UserResponse(BaseModel):
 
     class Config:
         orm_mode = True
-
-
 
 class EmergencyContactCreate(BaseModel):
     name: str
@@ -32,6 +30,17 @@ class EmergencyContactResponse(BaseModel):
     name: str
     email: EmailStr  # email for output
     relation: str
+
+    class Config:
+        orm_mode = True
+
+
+class FamilyMemberCountUpdate(BaseModel):
+    count: conint(ge=0)  # conint is a constrained int type ensuring the count is non-negative
+
+class FamilyMemberCountResponse(BaseModel):
+    user_id: int
+    family_member_count: int
 
     class Config:
         orm_mode = True

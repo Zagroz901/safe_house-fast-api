@@ -13,6 +13,7 @@ class User(Base):
     email = Column(String(100), unique=True, nullable=False)  # Add email field
     hashed_password = Column(String(255), nullable=False)
     emergency_contacts = relationship("EmergencyContact", back_populates="user")
+    family_member_count = Column(Integer, default=0)  # New column to store the family member count
 
 class EmergencyContact(Base):
     __tablename__ = "emergency_contacts"

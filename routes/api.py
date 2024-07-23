@@ -11,7 +11,7 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 
 from  ..models.user_model import Base, engine, SessionLocal, User ,EmergencyContact
-from ..schema.user_schema import UserResponse ,EmergencyContactCreate, EmergencyContactResponse
+from ..schema.user_schema import UserResponse ,EmergencyContactCreate, EmergencyContactResponse,FamilyMemberCountResponse,FamilyMemberCountUpdate
 
 from ..processing.utils import ALGORITHM, SECRET_KEY, get_password_hash, verify_password, create_access_token
 
@@ -93,3 +93,21 @@ def add_emergency_contact(user_id: int, contact: EmergencyContactCreate, db: Ses
 def get_emergency_contacts(user_id: int, db: Session = Depends(get_db)):
     contacts = db.query(EmergencyContact).filter(EmergencyContact.user_id == user_id).all()
     return contacts
+
+@router.post("/users/{user_id}/update_family_count")
+def update_family_member_count(user_id: int, count_update: FamilyMemberCountUpdate, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.family_member_count = count_update.count
+    db.commit()
+    return FamilyMemberCountResponse(user_id=user.id, family_member_count=user.family_member_count)
+
+
+
+@router.get("/users/{user_id}/family_count/", response_model=FamilyMemberCountResponse)
+def get_family_member_count(user_id: int, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return FamilyMemberCountResponse(user_id=user.id, family_member_count=user.family_member_count)
