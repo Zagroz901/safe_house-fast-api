@@ -1,6 +1,6 @@
-from sqlalchemy import Column, Integer, String, create_engine
+from sqlalchemy import Column, Integer, String, ForeignKey, create_engine
+from sqlalchemy.orm import relationship, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
 
 DATABASE_URL = "mysql+pymysql://root:zako0992417578@localhost/safe_house"
 
@@ -10,7 +10,18 @@ class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String(50), unique=True, index=True, nullable=False)
+    email = Column(String(100), unique=True, nullable=False)  # Add email field
     hashed_password = Column(String(255), nullable=False)
+    emergency_contacts = relationship("EmergencyContact", back_populates="user")
+
+class EmergencyContact(Base):
+    __tablename__ = "emergency_contacts"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    name = Column(String(100), nullable=False)
+    email = Column(String(100), nullable=False)  # Assuming validation for email format will be handled
+    relation = Column(String(50), nullable=False)  # Renamed from 'relationship' to 'relation'
+    user = relationship("User", back_populates="emergency_contacts")
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

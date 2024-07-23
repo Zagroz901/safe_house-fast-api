@@ -3,9 +3,17 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from app.routes import websocket, api
-
+from fastapi.middleware.cors import CORSMiddleware
 app = FastAPI()
 
+# CORS middleware setup
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],  # Allows your React app's URL
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all HTTP methods
+    allow_headers=["*"],  # Allows all headers
+)
 # Include routes
 app.include_router(websocket.router)
 app.include_router(api.router, prefix="/api")
