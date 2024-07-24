@@ -35,7 +35,7 @@ async def websocket_endpoint(
         while True:
             try:
                 data = await websocket.receive_bytes()
-                logging.debug(f"Received data of length: {len(data)}")
+                # logging.debug(f"Received data of length: {len(data)}")
                 response = await process_video_frame(data, yolo_model, deepsort_model, deepface_model)
                 await websocket.send_bytes(response)
             except WebSocketDisconnect:

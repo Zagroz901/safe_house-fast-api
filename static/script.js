@@ -35,17 +35,24 @@ window.onload = function() {
             img.src = url;
         };
 
+        let reconnectAttempts = 0;
+
         websocket.onclose = (event) => {
             console.log('WebSocket connection closed:', event.code, event.reason);
-            if (event.code !== 1000) { // 1000 indicates normal closure
+            if (event.code !== 1000 && reconnectAttempts < 5) { // Limit reconnection attempts
                 console.log('Attempting to reconnect...');
-                setTimeout(connectWebSocket, reconnectInterval);
+                setTimeout(() => {
+                    connectWebSocket();
+                    reconnectAttempts++;
+                }, Math.min(5000 * 2 ** reconnectAttempts, 30000)); // Exponential back-off
             }
         };
-
+        
         websocket.onerror = (error) => {
             console.error('WebSocket error:', error);
+            websocket.close(); // Ensure closure on error to trigger reconnection logic if needed
         };
+        
     }
 
     uploadButton.addEventListener('click', () => {
@@ -103,9 +110,11 @@ window.onload = function() {
                     canvas.toBlob((blob) => {
                         blob.arrayBuffer().then((buffer) => {
                             console.log('Sending video frame to server...');
-                            websocket.send(buffer);
+                            if (websocket.readyState === WebSocket.OPEN) {
+                                websocket.send(buffer);
+                            }
                         });
-                    }, 'image/jpeg');
+                    }, 'image/jpeg',0.7);
                     setTimeout(step, 1000 / fps);
                 }
                 step();
