@@ -1,4 +1,4 @@
-# app/processing/video_processing.py
+# video_processing.py
 
 import cv2
 import numpy as np
@@ -7,14 +7,19 @@ import logging
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
+executor = ThreadPoolExecutor(max_workers=4)
 previous_frame_data = {}
 
-
 logging.basicConfig(level=logging.DEBUG, format='%(threadName)s: %(message)s')
-executor = ThreadPoolExecutor(max_workers=4)
 
 def process_frame(frame, yolo_model, deepsort_model, deepface_model):
     logging.debug("Starting frame processing")
+
+    # Downscale frame for processing
+    # original_size = (frame.shape[1], frame.shape[0])
+    # downscale_size = (640, 360)  # Example size, adjust based on your needs
+    # frame = cv2.resize(frame, downscale_size)
+
     # Apply YOLO for human detection
     person_detected, results = detect_person(frame, yolo_model)
     
@@ -28,7 +33,9 @@ def process_frame(frame, yolo_model, deepsort_model, deepface_model):
         
         # Display verification results on frame
         process_verified_people(verification_results, data, frame)
-        
+    
+    # Optionally, resize back to the original size if needed for display
+    # frame = cv2.resize(frame, original_size)
     logging.debug("Completed frame processing")
     return frame
 
@@ -44,7 +51,7 @@ async def process_video_frame(data, yolo_model, deepsort_model, deepface_model):
     loop = asyncio.get_event_loop()
     processed_frame = await loop.run_in_executor(executor, process_frame, frame, yolo_model, deepsort_model, deepface_model)
     
-    _, buffer = cv2.imencode('.jpg', processed_frame)
+    _, buffer = cv2.imencode('.jpeg', processed_frame)
     return buffer.tobytes()
 
 def is_face_detected(data):

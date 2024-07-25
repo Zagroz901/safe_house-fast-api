@@ -9,10 +9,10 @@ app = FastAPI()
 # CORS middleware setup
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Allows your React app's URL
+    allow_origins=["http://localhost:3000"],  # URL of the React frontend
     allow_credentials=True,
-    allow_methods=["*"],  # Allows all HTTP methods
-    allow_headers=["*"],  # Allows all headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 # Include routes
 app.include_router(websocket.router)

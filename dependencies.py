@@ -9,14 +9,26 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
+yolo_model_instance = None
+deepsort_model_instance = None
+deepface_model_instance = None
+
 def get_yolo_model():
-    logger.info("Loading YOLO model...")
-    return load_yolo_model()
+    global yolo_model_instance
+    if yolo_model_instance is None:
+        yolo_model_instance = load_yolo_model()
+    return yolo_model_instance
 
 def get_deepsort_model():
-    logger.info("Loading DeepSORT model...")
-    return load_deepsort_model()
+    global deepsort_model_instance
+    if deepsort_model_instance is None:
+        deepsort_model_instance = load_deepsort_model()
+    return deepsort_model_instance
 
 def get_deepface_model():
-    logger.info("Loading DeepFace model...")
-    return load_deepface_model()
+    global deepface_model_instance
+    if deepface_model_instance is None:
+        deepface_model_instance = load_deepface_model()
+    return deepface_model_instance
+

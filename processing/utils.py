@@ -86,21 +86,21 @@ def verify_faces(frame, faces_detected, data, deepface_model):
         if not 'verified' in data[id].keys():
             if faces_detected[id]:
                 x1, y1, x2, y2 = data[id]['location']
-                logging.debug(f"Original coordinates for ID {id}: x1={x1}, y1={y1}, x2={x2}, y2={y2}")
+                # logging.debug(f"Original coordinates for ID {id}: x1={x1}, y1={y1}, x2={x2}, y2={y2}")
 
                 # Ensure coordinates are within frame boundaries
                 x1, y1 = max(0, int(x1)), max(0, int(y1))
                 x2, y2 = min(frame_width, int(x2)), min(frame_height, int(y2))
-                logging.debug(f"Adjusted coordinates for ID {id}: x1={x1}, y1={y1}, x2={x2}, y2={y2}")
+                # logging.debug(f"Adjusted coordinates for ID {id}: x1={x1}, y1={y1}, x2={x2}, y2={y2}")
 
                 # Extract face region and verify its size
                 face_region = frame[y1:y2, x1:x2]
                 if face_region.size == 0:
-                    logging.error(f"Face region for ID {id} is empty. Skipping verification.")
+                    # logging.error(f"Face region for ID {id} is empty. Skipping verification.")
                     results[id] = False
                     continue
 
-                logging.debug(f"Face region for ID {id} size: {face_region.shape}")
+                # logging.debug(f"Face region for ID {id} size: {face_region.shape}")
 
                 try:
                     verification = deepface_model.find(

@@ -88,40 +88,48 @@ window.onload = function() {
     function readAndSendVideo(file) {
         const video = document.createElement('video');
         video.src = URL.createObjectURL(file);
-
+    
         video.addEventListener('loadeddata', () => {
             console.log('Video loaded.');
             const canvas = document.createElement('canvas');
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
             const context = canvas.getContext('2d');
-
+            
+            let frameCount = 0;
+            const frameSkip = 5; // Skip every 2 frames, adjust as needed
+    
             video.play();
-
+    
             video.addEventListener('play', function () {
                 console.log('Video playing...');
-                const fps = 10; // Reduced frame rate to 10 FPS
+                const fps = 10;
                 function step() {
                     if (video.paused || video.ended) {
                         console.log('Video playback ended.');
                         return;
                     }
-                    context.drawImage(video, 0, 0, canvas.width, canvas.height);
-                    canvas.toBlob((blob) => {
-                        blob.arrayBuffer().then((buffer) => {
-                            console.log('Sending video frame to server...');
-                            if (websocket.readyState === WebSocket.OPEN) {
-                                websocket.send(buffer);
-                            }
+                    
+                    // if (frameCount % frameSkip === 0) {
+                        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                        canvas.toBlob((blob) => {
+                            blob.arrayBuffer().then((buffer) => {
+                                console.log('Sending video frame to server...');
+                                if (websocket.readyState === WebSocket.OPEN) {
+                                    websocket.send(buffer);
+                                }
+                            }, 'image/jpeg', 0.5);
                         });
-                    }, 'image/jpeg',0.7);
+                    // }
+    
+                    frameCount++;
                     setTimeout(step, 1000 / fps);
                 }
                 step();
             });
         });
     }
-
+    
     // Initial WebSocket connection
     connectWebSocket();
 };
