@@ -1,9 +1,10 @@
 from fastapi import APIRouter, WebSocket, Depends, WebSocketDisconnect
 from starlette.websockets import WebSocketState
-from ..dependencies import get_yolo_model, get_deepsort_model, get_deepface_model,get_lstm_model
+from ..dependencies import get_yolo_model, get_deepsort_model, get_deepface_model, get_lstm_model
 from ..processing.video_processing import process_video_frame
 import logging
 import asyncio
+import json
 
 logging.basicConfig(level=logging.INFO)
 
@@ -16,10 +17,10 @@ async def websocket_endpoint(
     deepsort_model=Depends(get_deepsort_model),
     deepface_model=Depends(get_deepface_model),
     lstm_model=Depends(get_lstm_model),
-    
 ):
     await websocket.accept()
     logging.info("WebSocket connection accepted")
+    use_lstm = False
 
     async def send_keepalive():
         while True:
@@ -36,9 +37,19 @@ async def websocket_endpoint(
     try:
         while True:
             try:
+                message = await websocket.receive_text()
+                try:
+                    # Attempt to parse as JSON control message
+                    control_data = json.loads(message)
+                    use_lstm = control_data.get("useLSTM", False)
+                except json.JSONDecodeError:
+                    # If not JSON, then it is likely binary frame data
+                    pass
+
+                # If we have received use_lstm and frame data, process the frame
                 data = await websocket.receive_bytes()
                 logging.debug(f"Received data of length: {len(data)}")
-                response = await process_video_frame(data, yolo_model, deepsort_model, deepface_model,lstm_model)
+                response = await process_video_frame(data, yolo_model, deepsort_model, deepface_model, lstm_model, use_lstm)
                 await websocket.send_bytes(response)
                 await websocket.send_text('{"type": "ack"}')
             except WebSocketDisconnect:

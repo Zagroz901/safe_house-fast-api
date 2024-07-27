@@ -2,7 +2,7 @@
 
 import base64
 import io
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, WebSocket, UploadFile, File, Form, HTTPException, Depends
 from ..dependencies import get_yolo_model, get_deepsort_model, get_deepface_model,get_lstm_model
 from ..processing.video_processing import process_video_frame
 from fastapi import Depends
@@ -17,6 +17,8 @@ from ..schema.user_schema import *
 import logging
 from ..processing.utils import ALGORITHM, SECRET_KEY, get_password_hash, verify_password, create_access_token
 from fastapi.responses import JSONResponse
+from starlette.websockets import WebSocketDisconnect  # Import the exception
+import json
 
 router = APIRouter()
 
@@ -32,7 +34,7 @@ def get_db():
 @router.post("/upload_video")
 async def upload_video(
     file: UploadFile = File(...),
-    apply_lstm: bool = Form(False),
+    use_lstm: bool = Form(False),
     yolo_model=Depends(get_yolo_model),
     deepsort_model=Depends(get_deepsort_model),
     deepface_model=Depends(get_deepface_model),
@@ -46,12 +48,40 @@ async def upload_video(
         raise HTTPException(status_code=400, detail="Failed to read video file.")
     
     try:
-        logging.info(f"Video data read, size: {len(video_data)} bytes")
-        result = await process_video_frame(video_data, yolo_model, deepsort_model, deepface_model, lstm_model, apply_lstm)
+        result = await process_video_frame(video_data, yolo_model, deepsort_model, deepface_model, lstm_model, use_lstm)
         return JSONResponse(content={"message": "Video processed successfully", "result": result})
     except ValueError as e:
-        logging.error(f"Error processing video: {str(e)}")
         return JSONResponse(content={"message": "Failed to process video"}, status_code=500)
+
+@router.websocket("/ws/video")
+async def websocket_endpoint(websocket: WebSocket, 
+                             yolo_model=Depends(get_yolo_model),
+                             deepsort_model=Depends(get_deepsort_model),
+                             deepface_model=Depends(get_deepface_model),
+                             lstm_model=Depends(get_lstm_model)):
+    await websocket.accept()
+    use_lstm = False  # Default to False
+    try:
+        # First, receive JSON control data
+        control_data = await websocket.receive_text()
+        settings = json.loads(control_data)
+        use_lstm = settings.get("useLSTM", False)
+        print(use_lstm)
+        # Then, receive binary frame data
+        while True:
+            try:
+                frame_data = await websocket.receive_bytes()
+                response = await process_video_frame(frame_data, yolo_model, deepsort_model, deepface_model, lstm_model, use_lstm)
+                await websocket.send_bytes(response)
+                await websocket.send_text('{"type": "ack"}')
+            except WebSocketDisconnect:
+                print("WebSocket disconnected")
+                break
+    except WebSocketDisconnect:
+        await websocket.close()
+    except Exception as e:
+        print(f"Error processing frame or control data: {e}")
+        await websocket.close()
 
 @router.post("/register", response_model=UserResponse)
 def create_user(user: UserCreate, db: Session = Depends(get_db)):

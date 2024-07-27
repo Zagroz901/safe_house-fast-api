@@ -24,7 +24,7 @@ async def async_verify_faces(frame, faces_detected, data, deepface_model):
 async def async_verify_violence(frame, data, lstm_model):
     return process_frame_for_violence(frame, data , lstm_model)
 
-async def process_frame(frame, yolo_model, deepsort_model, deepface_model,lstm_model):
+async def process_frame(frame, yolo_model, deepsort_model, deepface_model, lstm_model, use_lstm):
     logging.debug("Starting asynchronous frame processing")
     inactive_frame_count = 0 
     MAX_INACTIVE_FRAMES = 300  
@@ -34,8 +34,9 @@ async def process_frame(frame, yolo_model, deepsort_model, deepface_model,lstm_m
     if person_detected:
         inactive_frame_count = 0 
         data = await async_track_person(results, frame, deepsort_model)
-        if len(data) >=2:
-            result_of_violence =  await async_verify_violence(frame,data,lstm_model)
+        if use_lstm:
+            if len(data) >=2:
+                result_of_violence =  await async_verify_violence(frame,data,lstm_model)
         faces_detected = is_face_detected(data)
         verification_results = await async_verify_faces(frame, faces_detected, data, deepface_model)
         process_verified_people(verification_results, data, frame)
@@ -47,7 +48,7 @@ async def process_frame(frame, yolo_model, deepsort_model, deepface_model,lstm_m
 
 
 
-async def process_video_frame(data, yolo_model, deepsort_model, deepface_model,lstm_model):
+async def process_video_frame(data, yolo_model, deepsort_model, deepface_model, lstm_model, use_lstm):
     nparr = np.frombuffer(data, np.uint8)
     frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
@@ -55,8 +56,7 @@ async def process_video_frame(data, yolo_model, deepsort_model, deepface_model,l
         logging.error("Failed to decode image")
         raise ValueError("Failed to decode image")
 
-    logging.debug("Submitting frame to asynchronous processing")
-    processed_frame = await process_frame(frame, yolo_model, deepsort_model, deepface_model,lstm_model)
+    processed_frame = await process_frame(frame, yolo_model, deepsort_model, deepface_model, lstm_model, use_lstm)
     
     _, buffer = cv2.imencode('.jpeg', processed_frame)
     return buffer.tobytes()
