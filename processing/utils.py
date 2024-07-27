@@ -6,6 +6,14 @@ import logging
 from passlib.context import CryptContext
 import jwt
 from datetime import datetime, timedelta
+from collections import deque
+
+sequence = deque(maxlen=128)  
+Q = deque(maxlen=128)
+violence_mode_active = False 
+violence_duration = 0 
+cooldown_counter = 0  
+cooldown_threshold = 5
 
 def detect_person(image, model):
     results = model.predict(image, classes=[0], conf=0.6, iou=0.5)
@@ -142,6 +150,100 @@ def process_verified_people(results, data, frame):
         cv2.putText(frame, str(id), (int(x1) - 10, int(y1) - 10), 1, 2, color, 2)
 
 
+def detect_violence(frame,model):
+    print("Loading model ...")
+
+    frame_resized = cv2.resize(frame, (128, 128)).astype("float32") / 255
+    sequence.append(frame_resized)
+    print(f"the size of sequesse : {len(sequence)}")
+
+    if len(sequence) == 13:  # Check if we have collected 16 frames
+        print("frame has been collected")
+        input_sequence = np.expand_dims(np.array(sequence), axis=0)  # Shape (1, 16, 64, 64, 3)
+        preds = model.predict(input_sequence)[0]
+        Q.append(preds)
+        sequence.popleft()  # Remove the oldest frame to maintain a sliding window of 16 frames
+        results = np.array(Q).mean(axis=0)
+        i = np.argmax(results)
+        label = "Violence" if i == 1 else "No Violence"
+        confidence = results[i] * 100
+
+        return label, confidence
+
+    return "No Violence", 0.0 
+
+
+def process_frame_for_violence(frame, data, model):
+    global violence_mode_active, violence_duration, cooldown_counter
+    threshold = 0.01
+    ids = list(data.keys())
+    n = len(ids)
+    iou_matrix = np.zeros((n, n)) if not violence_mode_active else None
+    violence_detected = False
+    detection_confidence = 0.0
+
+    if not violence_mode_active:
+        for i in range(n):
+            for j in range(i + 1, n):
+                iou_value = compute_iou(data[ids[i]]['location'], data[ids[j]]['location'])
+                iou_matrix[i, j] = iou_value
+                iou_matrix[j, i] = iou_value
+                if iou_value > threshold:
+                    label, confidence = detect_violence(frame, model)
+                    if label == "Violence":
+                        violence_mode_active = True
+                        violence_duration = 1
+                        display_violence_alert(frame, label, confidence)
+                        violence_detected = True
+                        detection_confidence = confidence
+                        break
+            if violence_mode_active:
+                break
+
+    if violence_mode_active:
+        label, confidence = detect_violence(frame, model)
+        display_violence_alert(frame, label, confidence)
+        if label == "Violence":
+            violence_duration += 1
+            violence_detected = True
+            detection_confidence = confidence
+        else:
+            if label == "No Violence":
+                if violence_duration >= threshold:
+                    if cooldown_counter < cooldown_threshold:
+                        cooldown_counter += 1
+                    else:
+                        violence_mode_active = False
+                        violence_duration = 0
+                        cooldown_counter = 0
+                else:
+                    violence_mode_active = False
+                    violence_duration = 0
+
+    return {
+        "violence_detected": violence_detected,
+        "detection_confidence": detection_confidence,
+        "violence_duration": violence_duration if violence_detected else 0
+    }
+
+
+def check_violence_duration(duration):
+    threshold = 10
+    return duration >= threshold
+
+def display_violence_alert(frame, label, confidence):
+    text = f"Violence Detected: {label} ({confidence:.2f}%)"
+    cv2.putText(frame, text, (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+
+   
+   
+def clear_chase(inactive_frame_count, MAX_INACTIVE_FRAMES, sequence, Q):
+    if inactive_frame_count >= MAX_INACTIVE_FRAMES:
+        sequence.clear()  
+        Q.clear()         
+        inactive_frame_count = 0 
+    return inactive_frame_count
+
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 SECRET_KEY = "mysecretkey"
 ALGORITHM = "HS256"
@@ -159,3 +261,4 @@ def create_access_token(data: dict):
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
+

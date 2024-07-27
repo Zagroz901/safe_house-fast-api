@@ -1,10 +1,14 @@
 from pydantic import BaseModel, EmailStr, validator,conint
+from typing import List
 
 class UserCreate(BaseModel):
     username: str
     email: EmailStr
     password: str
 
+class  UserLog(BaseModel):
+    email: EmailStr
+    password: str
 
 class UserResponse(BaseModel):
     id: int
@@ -42,5 +46,18 @@ class FamilyMemberCountResponse(BaseModel):
     user_id: int
     family_member_count: int
 
+    class Config:
+        orm_mode = True
+
+class InfoCreate(BaseModel):
+    
+    email: List[EmailStr]  # Validate email format
+    photo_url: List[str]  # List of base64 encoded strings
+
+class InfoResponse(BaseModel):
+
+    email: List[EmailStr]
+    photo_url: List[str]
+    
     class Config:
         orm_mode = True

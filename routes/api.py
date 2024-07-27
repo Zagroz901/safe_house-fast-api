@@ -1,7 +1,9 @@
 # app/routes/api.py
 
+import base64
+import io
 from fastapi import APIRouter, UploadFile, File, HTTPException
-from ..dependencies import get_yolo_model, get_deepsort_model, get_deepface_model
+from ..dependencies import get_yolo_model, get_deepsort_model, get_deepface_model,get_lstm_model
 from ..processing.video_processing import process_video_frame
 from fastapi import Depends
 from typing import List
@@ -9,12 +11,12 @@ from fastapi import FastAPI, Depends, HTTPException, status, Form
 from sqlalchemy.orm import Session
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
-
-from  ..models.user_model import Base, engine, SessionLocal, User ,EmergencyContact
-from ..schema.user_schema import UserResponse ,EmergencyContactCreate, EmergencyContactResponse,FamilyMemberCountResponse,FamilyMemberCountUpdate
-
+from PIL import Image
+from  ..models.user_model import Base, engine, SessionLocal, User , FamilyPhotos, EmergencyContact
+from ..schema.user_schema import *
+import logging
 from ..processing.utils import ALGORITHM, SECRET_KEY, get_password_hash, verify_password, create_access_token
-
+from fastapi.responses import JSONResponse
 
 router = APIRouter()
 
@@ -30,34 +32,44 @@ def get_db():
 @router.post("/upload_video")
 async def upload_video(
     file: UploadFile = File(...),
+    apply_lstm: bool = Form(False),
     yolo_model=Depends(get_yolo_model),
     deepsort_model=Depends(get_deepsort_model),
-    deepface_model=Depends(get_deepface_model)
+    deepface_model=Depends(get_deepface_model),
+    lstm_model=Depends(get_lstm_model),
 ):
     if file.content_type != "video/mp4":
         raise HTTPException(status_code=400, detail="Invalid file type. Only mp4 is allowed.")
     
-    # Process the uploaded video
-    result = await process_video_frame(file, yolo_model, deepsort_model, deepface_model)
-    return {"message": "Video processed successfully", "result": result}
+    video_data = await file.read()
+    if not video_data:
+        raise HTTPException(status_code=400, detail="Failed to read video file.")
+    
+    try:
+        logging.info(f"Video data read, size: {len(video_data)} bytes")
+        result = await process_video_frame(video_data, yolo_model, deepsort_model, deepface_model, lstm_model, apply_lstm)
+        return JSONResponse(content={"message": "Video processed successfully", "result": result})
+    except ValueError as e:
+        logging.error(f"Error processing video: {str(e)}")
+        return JSONResponse(content={"message": "Failed to process video"}, status_code=500)
 
 @router.post("/register", response_model=UserResponse)
-def create_user(username: str = Form(...), email: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
-    db_user = db.query(User).filter((User.username == username) | (User.email == email)).first()
+def create_user(user: UserCreate, db: Session = Depends(get_db)):
+    db_user = db.query(User).filter((User.username == user.username) | (User.email == user.email)).first()
     if db_user:
-        if db_user.email == email:
+        if db_user.email == user.email:
             raise HTTPException(status_code=400, detail="Email already registered")
-    hashed_password = get_password_hash(password)
-    db_user = User(username=username, email=email, hashed_password=hashed_password)
+    hashed_password = get_password_hash(user.password)
+    db_user = User(username=user.username, email=user.email, hashed_password=hashed_password)
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
     return db_user
 
 @router.post("/login", response_model=dict)
-def login_for_access_token(email: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == email).first()
-    if not user or not verify_password(password, user.hashed_password):
+def login_for_access_token(cred:UserLog , db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == cred.email).first()
+    if not user or not verify_password(cred.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
@@ -77,6 +89,24 @@ def read_users_me(token: str = Depends(oauth2_scheme), db: Session = Depends(get
     except JWTError:
         raise HTTPException(status_code=401, detail="Could not validate credentials", headers={"WWW-Authenticate": "Bearer"})
 
+
+@router.post("/users/info/{user_id}")
+def user_info(data: InfoCreate, user_id: int , db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+         
+    for photo in data.photo_url:
+        db_photo= FamilyPhotos(user_id= user_id, photo_url= photo)
+        db.add(db_photo)
+    for email in data.email:
+        db_contact= EmergencyContact(user_id= user_id, email= email)
+        db.add(db_contact)
+
+    db.commit()
+    db.refresh(db_photo)
+    db.refresh(db_contact)
+    return data
 
 @router.post("/users/{user_id}/emergency-contact", response_model=EmergencyContactResponse)
 def add_emergency_contact(user_id: int, contact: EmergencyContactCreate, db: Session = Depends(get_db)):

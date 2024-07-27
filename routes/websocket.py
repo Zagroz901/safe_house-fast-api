@@ -1,6 +1,6 @@
 from fastapi import APIRouter, WebSocket, Depends, WebSocketDisconnect
 from starlette.websockets import WebSocketState
-from ..dependencies import get_yolo_model, get_deepsort_model, get_deepface_model
+from ..dependencies import get_yolo_model, get_deepsort_model, get_deepface_model,get_lstm_model
 from ..processing.video_processing import process_video_frame
 import logging
 import asyncio
@@ -14,7 +14,9 @@ async def websocket_endpoint(
     websocket: WebSocket,
     yolo_model=Depends(get_yolo_model),
     deepsort_model=Depends(get_deepsort_model),
-    deepface_model=Depends(get_deepface_model)
+    deepface_model=Depends(get_deepface_model),
+    lstm_model=Depends(get_lstm_model),
+    
 ):
     await websocket.accept()
     logging.info("WebSocket connection accepted")
@@ -36,7 +38,7 @@ async def websocket_endpoint(
             try:
                 data = await websocket.receive_bytes()
                 logging.debug(f"Received data of length: {len(data)}")
-                response = await process_video_frame(data, yolo_model, deepsort_model, deepface_model)
+                response = await process_video_frame(data, yolo_model, deepsort_model, deepface_model,lstm_model)
                 await websocket.send_bytes(response)
                 await websocket.send_text('{"type": "ack"}')
             except WebSocketDisconnect:
