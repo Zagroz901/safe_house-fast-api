@@ -14,7 +14,6 @@ class User(Base):
     hashed_password = Column(String(255), nullable=False)
     emergency_contacts = relationship("EmergencyContact", back_populates="user")
     family_member_count = Column(Integer, default=0)  # New column to store the family member count
-    family_photos= relationship("FamilyPhotos", back_populates="user")
 
 class EmergencyContact(Base):
     __tablename__ = "emergency_contacts"
@@ -22,13 +21,6 @@ class EmergencyContact(Base):
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     email = Column(String(100), nullable=False)  # Assuming validation for email format will be handled
     user = relationship("User", back_populates="emergency_contacts")
-
-class FamilyPhotos(Base):
-    __tablename__= "family_photos"
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
-    photo_url = Column(String(255), nullable=False)    
-    user = relationship("User", back_populates="family_photos")
     
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

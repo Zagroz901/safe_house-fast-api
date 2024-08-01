@@ -12,13 +12,15 @@ from sqlalchemy.orm import Session
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from PIL import Image
-from  ..models.user_model import Base, engine, SessionLocal, User , FamilyPhotos, EmergencyContact
+from  ..models.user_model import Base, engine, SessionLocal, User , EmergencyContact
 from ..schema.user_schema import *
 import logging
 from ..processing.utils import ALGORITHM, SECRET_KEY, get_password_hash, verify_password, create_access_token
 from fastapi.responses import JSONResponse
 from starlette.websockets import WebSocketDisconnect  # Import the exception
 import json
+import os
+import shutil
 
 router = APIRouter()
 
@@ -120,54 +122,39 @@ def read_users_me(token: str = Depends(oauth2_scheme), db: Session = Depends(get
         raise HTTPException(status_code=401, detail="Could not validate credentials", headers={"WWW-Authenticate": "Bearer"})
 
 
-@router.post("/users/info/{user_id}")
+@router.post("/users/emergency-contact/{user_id}")
 def user_info(data: InfoCreate, user_id: int , db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
          
-    for photo in data.photo_url:
-        db_photo= FamilyPhotos(user_id= user_id, photo_url= photo)
-        db.add(db_photo)
     for email in data.email:
         db_contact= EmergencyContact(user_id= user_id, email= email)
         db.add(db_contact)
 
     db.commit()
-    db.refresh(db_photo)
     db.refresh(db_contact)
     return data
 
-@router.post("/users/{user_id}/emergency-contact", response_model=EmergencyContactResponse)
-def add_emergency_contact(user_id: int, contact: EmergencyContactCreate, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.id == user_id).first()
+if not os.path.exists('photos'):
+    os.makedirs('photos')
+
+
+@router.post("/users/upload-photos/{user_id}")
+async def upload_photos(photo_paths: PhotoPaths, user_id:int , db: Session = Depends(get_db)):
+    user=db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    new_contact = EmergencyContact(**contact.dict(), user_id=user_id)
-    db.add(new_contact)
-    db.commit()
-    db.refresh(new_contact)
-    return new_contact
-
-@router.get("/users/{user_id}/emergency-contact", response_model=List[EmergencyContactResponse])
-def get_emergency_contacts(user_id: int, db: Session = Depends(get_db)):
-    contacts = db.query(EmergencyContact).filter(EmergencyContact.user_id == user_id).all()
-    return contacts
-
-@router.post("/users/{user_id}/update_family_count")
-def update_family_member_count(user_id: int, count_update: FamilyMemberCountUpdate, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    user.family_member_count = count_update.count
-    db.commit()
-    return FamilyMemberCountResponse(user_id=user.id, family_member_count=user.family_member_count)
+    if not os.path.exists(f'photos/{user.username}'):
+        os.makedirs(f'photos/{user.username}')
+    for path in photo_paths.paths:
+        try:
+            filename = os.path.basename(path)
+            destination = f"photos/{user.username}/{filename}"
+            shutil.copyfile(path, destination)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Error saving the file: {str(e)}")
+    return {"message": "uploaded successfully"}
 
 
 
-@router.get("/users/{user_id}/family_count/", response_model=FamilyMemberCountResponse)
-def get_family_member_count(user_id: int, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    return FamilyMemberCountResponse(user_id=user.id, family_member_count=user.family_member_count)

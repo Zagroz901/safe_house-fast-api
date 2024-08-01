@@ -262,3 +262,60 @@ def create_access_token(data: dict):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
+
+
+# Global variables for breaking detection
+zones = []
+polygons = []
+current_zone_index = 0
+drawing = False
+current_polygon = []
+
+# Helper function to draw polygons for breaking detection
+def draw_polygon(event, x, y, flags, param):
+    global drawing, current_polygon, polygons, current_zone_index
+    if event == cv2.EVENT_LBUTTONDOWN:
+        drawing = True
+        current_polygon = [(x, y)]
+    elif event == cv2.EVENT_MOUSEMOVE and drawing:
+        current_polygon.append((x, y))
+    elif event == cv2.EVENT_LBUTTONUP:
+        drawing = False
+        current_polygon.append((x, y))
+        polygons.append({'coords': current_polygon, 'name': f"Zone {current_zone_index}", 'risk_level': 'medium'})
+        current_zone_index += 1
+
+def plot_zones(frame, polygons):
+    colors = {'high': (0, 0, 255), 'medium': (0, 255, 255), 'low': (0, 255, 0)}
+    for polygon in polygons:
+        points = np.array(polygon['coords'], np.int32)
+        points = points.reshape((-1, 1, 2))
+        cv2.polylines(frame, [points], isClosed=True, color=colors[polygon['risk_level']], thickness=2)
+        cv2.putText(frame, polygon['name'], (points[0][0][0], points[0][0][1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, colors[polygon['risk_level']], 2)
+
+def assign_zone_to_person(data, polygons):
+    def point_in_polygon(point, polygon):
+        return cv2.pointPolygonTest(np.array(polygon, dtype=np.int32), point, False) >= 0
+
+    def is_person_in_zone(keypoints, polygon):
+        important_keypoints_indices = [0, 5, 6, 11, 12, 13, 14, 15, 16]  # Indices for nose, shoulders, hips, knees, ankles
+        for idx in important_keypoints_indices:
+            x, y, confidence = keypoints[idx]
+            if confidence > 0.5 and point_in_polygon((x, y), polygon):
+                return True
+        return False
+
+    for id, attributes in data.items():
+        person_in_zone = False
+        for polygon in polygons:
+            if is_person_in_zone(attributes['keyPoints'], polygon['coords']):
+                attributes['zone'] = polygon['name']
+                attributes['risk_level'] = polygon['risk_level']
+                person_in_zone = True
+                break
+
+        if not person_in_zone:
+            attributes['zone'] = 'unknown'
+            attributes['risk_level'] = 'none'
+            
+            
